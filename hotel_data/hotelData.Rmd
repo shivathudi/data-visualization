@@ -1,0 +1,438 @@
+---
+title: "Assignment #5"
+author: "Shivakanth Thudi"
+date: "August 12, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, tidy = TRUE)
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff=60))
+```
+
+# Question 1
+
+## Task 1
+```{r Initial_Setup, eval=TRUE}
+# install.packages("lubridate")
+# install.packages("plyr")
+# install.packages("corrplot")
+# install.packages("dplyr")
+# install.packages("tidyr")
+# install.packages("ggplot2")
+# install.packages("scales")
+# install.packages("Hmisc")
+
+library(plyr)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+library(corrplot)
+library(Hmisc)
+```
+
+We convert the date variable from a factor to a date using lubridate. We check for observations that have `event_min` greater than `max_min`, and set `event_min` to be `max_min` in these rows. We also convert the year to a factor, and find that there are no NAs in the dataframe.
+
+
+```{r Cleaning_Data}
+hotel_df  <- read.csv("hotelData.csv")
+hotel_df$date  <- parse_date_time(hotel_df$date, "ymd hms")
+cond <- hotel_df$event_min > hotel_df$max_min
+hotel_df$event_min[cond] <- hotel_df$max_min[cond]
+
+hotel_df$Year <- factor(hotel_df$year)
+
+apply(hotel_df, 2, function(x) any(is.na(x)))
+```
+
+We also create the `yearday`,`weekday`, and `type` variables. We have a difrooms variable which is a factor that represents the 21 different rooms in the dataset. Also, we add the `room_utilization_rate` variable which is calculated as shown.
+
+
+```{r More_Cleaning}
+hotel_df$yearday  <- yday(hotel_df$date)
+hotel_df$Weekday <- factor(weekdays(hotel_df$date), levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"), ordered =TRUE)
+
+hotel_df$type  <- sapply(hotel_df$Weekday, function(x){
+  if (x == "Sunday" |x=="Saturday") {
+    return("Weekend")
+  } else 
+    return("Weekday")
+})
+
+hotel_df$room_utilization_rate <- (hotel_df$event_min/hotel_df$max_min)
+
+difrooms <- levels(hotel_df$room)
+```
+
+## Task 2
+
+```{r task2}
+linegraphs_yearday <- function(roomtype, df=hotel_df) {
+  my_room_data <- filter(df, room==roomtype)
+  
+  myggplot <- ggplot(my_room_data, aes(x=yearday, y=as.numeric(room_utilization_rate), group = Year, color = Year)) + 
+    geom_line() + 
+    facet_grid(Year ~ .) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.25), labels= percent) +
+    scale_x_continuous(breaks = seq(0, 365, by = 30)) +
+    ylab("Utilization \n") +
+    xlab("\n Day of Year") +
+    labs(title = paste("Room ",roomtype, " Utilization Rate\n", sep = "")) + 
+    theme(strip.text = element_text(size = 18, angle = 90)) + 
+    theme(axis.text=element_text(size=11),axis.title=element_text(size=20)) + 
+    theme(plot.title = element_text(size=22))
+  
+  ggsave(paste("linegraph_yearday_", roomtype, ".png", sep=""),width = 11, height = 8.5)
+}
+
+lapply(difrooms,linegraphs_yearday,hotel_df)
+```
+
+## Task 3
+
+```{r task3}
+linegraphs_weekday <- function(roomtype, df=hotel_df) {
+  my_room_data <- filter(df, room==roomtype)
+  
+  myggplot <- ggplot(my_room_data, aes(x=yearday, y=as.numeric(room_utilization_rate), group = Weekday, color = Weekday)) + 
+    geom_line() + 
+    facet_grid(Weekday ~ .) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.25), labels= percent) +
+    scale_x_continuous(breaks = seq(0, 365, by = 30)) +
+    ylab("Utilization \n") +
+    xlab("\n Day of Year") +
+    labs(title = paste("Room ",roomtype, " Utilization Rates by Day of Week\n", sep = ""))+ 
+    theme(strip.text = element_text(size = 12, angle = 90)) + 
+    theme(axis.text=element_text(size=11),axis.title=element_text(size=20)) + 
+    theme(plot.title = element_text(size=22))
+  
+  ggsave(paste("linegraph_weekday_", roomtype, ".png", sep=""),width = 11, height = 8.5)
+}
+
+
+lapply(difrooms,linegraphs_weekday,hotel_df)
+
+```
+
+## Task 4
+
+```{r task4}
+linegraphs_weekday_means <- function(roomtype, df=hotel_df) {
+  
+  my_room_data <- filter(df, room==roomtype)
+  
+  
+  myggplot <- ggplot(my_room_data, aes(x=yearday, y=as.numeric(room_utilization_rate), group = type)) + 
+    facet_grid(type ~ .) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.25), labels= percent) +
+    scale_x_continuous(breaks = seq(0, 365, by = 30)) +
+    ylab("Min, Mean, and Max Utilization \n") +
+    xlab("\n Day of Year") + 
+    stat_summary(fun.ymin = min, fun.ymax = max, geom = "ribbon", alpha = 1.0, fill = "grey")     + stat_summary(fun.y = mean, geom = "line") +
+    labs(title = paste("Room ",roomtype, " Utilization Rates\n", sep = "")) +
+    theme(strip.text = element_text(size = 18, angle = 90)) + 
+    theme(axis.text=element_text(size=11),axis.title=element_text(size=20)) + 
+    theme(plot.title = element_text(size=22))
+  
+  ggsave(paste("linegraph_type_", roomtype, ".png", sep=""),width = 11, height = 8.5)
+  
+}
+
+lapply(difrooms,linegraphs_weekday_means,hotel_df)
+```
+
+## Task 5
+
+```{r task5}
+linegraphs_weekday_means_2 <- function(roomtype, df=hotel_df) {
+  
+  my_room_data <- filter(df, room==roomtype)
+  
+  myggplot <- ggplot(my_room_data, aes(x=yearday, y=as.numeric(room_utilization_rate))) +        scale_y_continuous(breaks = seq(0, 1, by = 0.25), labels= percent) +
+    scale_x_continuous(breaks = seq(0, 365, by = 30)) +
+    ylab("Min, Mean, and Max Utilization \n") +
+    xlab("\n Day of Year") + 
+    stat_summary(fun.ymin = min, fun.ymax = max, geom = "ribbon", alpha = 1.0, fill = "grey")     + stat_summary(fun.y = mean, geom = "line") + 
+    labs(title = paste("Room ",roomtype, " Utilization Rates\n", sep = "")) +
+    theme(strip.text = element_text(size = 18, angle = 90)) + 
+    theme(axis.text=element_text(size=11),axis.title=element_text(size=20)) + 
+    theme(plot.title = element_text(size=22))
+  
+  ggsave(paste("linegraph_mean_", roomtype, ".png", sep=""),width = 11, height = 8.5)
+  
+}
+
+lapply(difrooms,linegraphs_weekday_means_2,hotel_df)
+```
+
+## Task 6
+
+```{r task6}
+Days_of_Week <- levels(hotel_df$Weekday)
+
+k <- seq(2,10, by = 1)
+
+for (i in Days_of_Week) {
+  mydf <- filter(hotel_df, Weekday == i)
+  meansdf <- aggregate(mydf$room_utilization_rate, list(Room = mydf$room),  mean)
+  meansdf$Room  <- paste("Room", meansdf$Room)
+  withinss = rep(NA, 9)
+  meansdf <- meansdf[order(meansdf[, 2]), ]
+  meansdf$Room <- factor(meansdf$Room, levels=meansdf$Room)
+  
+  for (a in k) {
+    kmeans_df <- kmeans(meansdf[, 2], a)
+    meansdf$Cluster <- factor(kmeans_df$cluster)
+    
+    myggplot <- ggplot(meansdf, aes(x=meansdf[,2], color=Cluster, y=Room)) + 
+      scale_x_continuous(labels= percent) +
+      geom_segment(aes(yend=Room), xend=0, colour="grey50") +
+      xlab("\n Mean Utilization") +
+      ylab("Room\n") +
+      geom_point(size=3) +
+      theme(axis.text=element_text(size=14),axis.title=element_text(size=16)) +
+      labs(title = paste(i,":",a,"-", "Means Grouping by Mean Utilization\n", sep = " ")) +theme(plot.title = element_text(size=20))
+    
+    ggsave(paste(i,"_", a,"_MeansGrouping.png",sep=""),width = 11, height = 8.5)
+    
+    withinss[a-1] <- kmeans_df$tot.withinss
+    
+  }
+  withinss_df  <- data.frame(k,withinss)
+  
+  myplot <- ggplot(withinss_df, aes(x=k, y=withinss)) +
+    geom_point() +
+    geom_line() +
+    xlab("\n Number of Clusters") +
+    ylab("Total Within SS\n") +
+    geom_point(size=3) +
+    theme(axis.text=element_text(size=10),axis.title=element_text(size=12)) +
+    scale_x_continuous(breaks = seq(2, 10, by = 1)) +
+    labs(title = paste(i,":","Total Within SS versus Number of Clusters for K-Means Grouping by Mean Utilization", sep = " ")) +theme(plot.title = element_text(size=16))
+  
+  ggsave(paste(i,"_","_TotalWithinSS.png",sep=""),width = 11, height = 8.5)
+}
+
+```
+
+## Task 7
+
+```{r task7}
+years_levels <- levels(hotel_df$Year)
+
+corrplot_year <- function(year_level, df=hotel_df) {
+  my_room_data <- filter(df, Year==year_level)
+  list_of_cols <- lapply(difrooms, function(x, mydf = my_room_data){
+    subset(mydf, room ==x, select = room_utilization_rate)
+  })
+  Cor_df <- do.call(cbind,list_of_cols)
+  colnames(Cor_df)  <- paste("Room", difrooms)
+  Cor_df  <- as.matrix(Cor_df)
+  
+  M  <- cor(Cor_df)
+  p.mat <-  rcorr(Cor_df)$P
+  
+  title <- paste("Correlation Matrix of Utilization by Year:",year_level)
+  filename <- paste("CorMat_", year_level, ".png", sep = "")
+  png(filename)
+  
+  corrplot(M, p.mat = p.mat, sig.level=0.04, type = "lower",method = "square",title= title, tl.col = "black", mar = c(0,0,5,0))
+  
+  dev.off()
+
+}
+
+lapply(years_levels,corrplot_year,hotel_df)
+
+```
+
+## Task 8
+
+```{r task8}
+weekday_levels <- levels(hotel_df$Weekday)
+
+corrplot_weekday <- function(weekday_level, df=hotel_df) {
+  my_room_data <- filter(df, Weekday==weekday_level)
+  list_of_cols <- lapply(difrooms, function(x, mydf = my_room_data){
+    subset(mydf, room ==x, select = room_utilization_rate)
+  })
+  Cor_df <- do.call(cbind,list_of_cols)
+  colnames(Cor_df)  <- paste("Room", difrooms)
+  Cor_df  <- as.matrix(Cor_df)
+  
+  M  <- cor(Cor_df)
+  p.mat <-  rcorr(Cor_df)$P
+  
+  title <- paste("Correlation Matrix of Utilization by Day:",weekday_level)
+  filename <- paste("CorMat_", weekday_level, ".png", sep = "")
+  png(filename)
+  
+  corrplot(M, p.mat = p.mat, sig.level=0.04, type = "lower",method = "square",title= title, tl.col = "black", mar = c(0,0,5,0))
+  
+  dev.off()
+  
+}
+
+lapply(weekday_levels,corrplot_weekday,hotel_df)
+```
+
+## Task 9
+
+```{r task9}
+list_of_cols <- lapply(difrooms, function(x, mydf = hotel_df){
+    subset(mydf, room ==x, select = room_utilization_rate)
+  })
+  
+  Cor_df <- do.call(cbind,list_of_cols)
+  
+  colnames(Cor_df)  <- paste("Room", difrooms)
+  
+  Cor_df  <- as.matrix(Cor_df)
+  
+  M  <- cor(Cor_df)
+  p.mat <-  rcorr(Cor_df)$P
+  
+  title <- "Correlation Matrix of Utilization"
+  
+  filename <- "CorMat_All.png"
+  png(filename)
+  
+  corrplot(M, p.mat = p.mat, sig.level=0.01, type = "lower",method = "square",title= title, tl.col = "black", mar = c(0,0,5,0))
+  
+  dev.off()
+```
+
+
+# Question 2
+
+## Section 2.1
+
+```{r fig.width=11, fig.height=8.5, eval=TRUE}
+x <- seq(0,1,length=100)
+
+beta1 <- dbeta(x, 0.5, 0.5)
+beta2 <- dbeta(x, 5, 1)
+beta3 <- dbeta(x, 1, 3)
+beta4 <- dbeta(x, 2, 2)
+beta5 <- dbeta(x, 2, 5)
+
+df <- data.frame(x,beta1, beta2, beta3, beta4, beta5)
+
+df <- gather(df, func, val, -x)
+
+greeks <- list(bquote(paste("{", alpha, ",", beta, "} = ", .(paste("{",0.5,",",0.5, "}", sep = "")), collapse = "")),bquote(paste("{", alpha, ",", beta, "} = ", .(paste("{",5,",",1, "}", sep = "")), collapse = "")),bquote(paste("{", alpha, ",", beta, "} = ", .(paste("{",1,",",3, "}", sep = "")), collapse = "")),bquote(paste("{", alpha, ",", beta, "} = ", .(paste("{",2,",",2, "}", sep = "")), collapse = "")),bquote(paste("{", alpha, ",", beta, "} = ", .(paste("{",2,",",5, "}", sep = "")), collapse = "")))
+
+gg <- ggplot(df, aes(x=x, y=val, group=func)) + 
+  geom_line(aes(color=func)) + 
+  scale_y_continuous(expand=c(0, 0)) + 
+  scale_color_manual(name="Beta params", 
+                     values=c("red", "green", "blue", "violet", "black"),
+                     labels=greeks)+ 
+  labs(x="\nx value", y="PDF\n",
+       title="Beta Probability Distribution Functions\n")+
+  theme(strip.text = element_text(size = 18, angle = 90)) + 
+  theme(axis.text=element_text(size=15),axis.title=element_text(size=20)) + 
+  theme(plot.title = element_text(size=22))
+
+gg
+
+ggsave("Beta Probability Distribution Functions.png")
+```
+
+## Section 2.2
+
+```{r fig.width=11, fig.height=8.5, eval=TRUE}
+x <- seq(0,1,length=100)
+
+beta1 <- pbeta(x, 0.5, 0.5)
+beta2 <- pbeta(x, 5, 1)
+beta3 <- pbeta(x, 1, 3)
+beta4 <- pbeta(x, 2, 2)
+beta5 <- pbeta(x, 2, 5)
+
+df <- data.frame(x,beta1, beta2, beta3, beta4, beta5)
+
+df <- gather(df, func, val, -x)
+
+gg <- ggplot(df, aes(x=x, y=val, group=func))+ 
+  geom_line(aes(color=func))+scale_y_continuous(expand=c(0, 0))+
+  scale_color_manual(name="Beta params",
+                   values=c("red", "green", "blue", "violet", "black"),
+                   labels=greeks)+
+  labs(x="\nx value", y="CDF\n",
+        title="Beta Cumulative Distribution Functions\n")+
+  theme(strip.text = element_text(size = 18, angle = 90)) + 
+  theme(axis.text=element_text(size=15),axis.title=element_text(size=20)) + 
+  theme(plot.title = element_text(size=22))
+
+gg
+
+ggsave("Beta Cumulative Distribution Functions.png")
+```
+
+## Section 2.3
+
+```{r fig.width=11, fig.height=8.5, eval = TRUE}
+x_vals <- seq(0,1,length=100)
+
+#These tuple values can be replaced and the graphs will update accordingly
+
+my_tuple_values <- list(c(0.5,0.5), c(5,1), c(1,3), c(2,2), c(2,5))
+
+mydf <- data.frame()
+
+df_list <- lapply(my_tuple_values, function(x, df=mydf) {
+  alpha_param =x[[1]]
+  beta_param=x[[2]]
+  y_val <- dbeta(x_vals,alpha_param,beta_param)
+  type <- rep("pdf", length(y_val))
+  
+  tuple <- rep(paste("{",alpha_param,",",beta_param,"}", sep = ""),length(y_val))
+  
+  new_df <- data.frame(x_vals,y_val, type, tuple)
+  new_df
+})
+
+
+
+mypdf <- do.call(rbind,df_list)
+
+df_list_2 <- lapply(my_tuple_values, function(x, df=mydf) {
+  alpha_param =x[[1]]
+  beta_param=x[[2]]
+  y_val <- pbeta(x_vals,alpha_param,beta_param)
+  type <- rep("cdf", length(y_val))
+  tuple <- rep(paste("{",alpha_param,",",beta_param,"}", sep = ""),length(y_val))
+  new_df <- data.frame(x_vals,y_val, type, tuple)
+  new_df
+})
+
+mycdf <- do.call(rbind,df_list_2)
+
+mydf <- rbind(mypdf, mycdf)
+
+mydf$tuple <- as.character(mydf$tuple)
+  
+my_plot <- ggplot(mydf, aes(x=x_vals, y=y_val, color = tuple)) + 
+  geom_line() + 
+  facet_grid(tuple ~ type, scales = "free", labeller = label_bquote(paste("{", alpha, ",", beta, "} = ", .(tuple), collapse = ""))) + 
+  theme(strip.text = element_text(size = 13)) + 
+  theme(axis.text=element_text(size=15),axis.title=element_text(size=20)) + 
+  theme(plot.title = element_text(size=22)) +
+  labs(x="\nx value", y="Distribution Function Value\n",title="Beta Distribution Functions\n")
+
+my_plot
+
+ggsave("Beta Distribution Functions.png")
+```
+
+
+
+
+
+
+
+
+
